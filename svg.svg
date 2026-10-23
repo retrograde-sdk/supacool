@@ -1,0 +1,1289 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 1000 620"
+     role="application" aria-label="Local game launcher" style="background:#05060a">
+  <title>Local game launcher</title>
+  <desc>A dark, glassy launcher listing three builds. Each row downloads once from Google Drive, stores the build locally, and launches it in a new tab.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#06070d"/>
+      <stop offset=".48" stop-color="#090b14"/>
+      <stop offset="1" stop-color="#05060b"/>
+    </linearGradient>
+
+    <radialGradient id="glowViolet" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#7657ff" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#5f43dc" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowOrange" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ff7b4a" stop-opacity=".13"/>
+      <stop offset="1" stop-color="#ff7b4a" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowGreen" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#4ee695" stop-opacity=".14"/>
+      <stop offset="1" stop-color="#4ee695" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowBlue" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#2b74ff" stop-opacity=".12"/>
+      <stop offset="1" stop-color="#2b74ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="50%" cy="45%" r="72%">
+      <stop offset="0" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".72" stop-color="#000" stop-opacity=".06"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".5"/>
+    </radialGradient>
+    <radialGradient id="fade" cx="50%" cy="46%" r="70%">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset=".72" stop-color="#fff" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#151928"/>
+      <stop offset=".56" stop-color="#0e111b"/>
+      <stop offset="1" stop-color="#0a0c13"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+      <stop offset=".24" stop-color="#fff" stop-opacity=".14"/>
+      <stop offset=".76" stop-color="#fff" stop-opacity=".14"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+
+    <radialGradient id="fortniteGlow" cx="88%" cy="-20%" r="88%">
+      <stop offset="0" stop-color="#b18cff" stop-opacity=".16"/>
+      <stop offset=".5" stop-color="#ff805c" stop-opacity=".05"/>
+      <stop offset="1" stop-color="#ff805c" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="minecraftGlow" cx="88%" cy="-20%" r="88%">
+      <stop offset="0" stop-color="#69efa8" stop-opacity=".15"/>
+      <stop offset=".5" stop-color="#2ed08a" stop-opacity=".045"/>
+      <stop offset="1" stop-color="#2ed08a" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="stableGlow" cx="88%" cy="-20%" r="88%">
+      <stop offset="0" stop-color="#8fb4ff" stop-opacity=".14"/>
+      <stop offset=".5" stop-color="#2b74ff" stop-opacity=".045"/>
+      <stop offset="1" stop-color="#2b74ff" stop-opacity="0"/>
+    </radialGradient>
+
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#fff" stroke-opacity=".05" stroke-width="1"/>
+    </pattern>
+    <mask id="gridFade">
+      <rect width="1000" height="620" fill="url(#fade)"/>
+    </mask>
+  </defs>
+
+  <style><![CDATA[
+    :root { color-scheme: dark; }
+    svg {
+      font-family: "SF Pro Display", "Inter", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+      background: #05060a;
+      /* Percentage sizing on a standalone SVG root overshoots the viewport at
+         fractional device-pixel ratios, which clips the right edge. Viewport
+         units keep the canvas exactly filling the window. */
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+    text { pointer-events: none; user-select: none; }
+
+    .game[data-game="minecraft"]       { --accent: #68e7a2; --accent-2: #34d399; }
+    .game[data-game="minecraft-stable"]{ --accent: #8fb4ff; --accent-2: #a78bfa; }
+    .game[data-game="fortnite"]        { --accent: #ff8b64; --accent-2: #b99cff; }
+
+    .run, .clear { outline: none; }
+    .run .shell, .clear .shell {
+      transform-box: fill-box;
+      transform-origin: center;
+      transition: transform .26s cubic-bezier(.2, .8, .2, 1);
+    }
+    .run .shell { cursor: pointer; }
+    .clear .shell { cursor: pointer; }
+    .run:not(.is-disabled):hover .shell { transform: translateY(-2px); }
+    .run:not(.is-disabled):active .shell { transform: translateY(0) scale(.998); }
+    .clear:not(.is-disabled):hover .shell { transform: translateY(-1px); }
+
+    .card, .edge, .icon-tile, .arrow-ring, .arrow, .status-dot, .progress-fill, .focus-ring {
+      transition: fill .22s ease, fill-opacity .22s ease, stroke .22s ease,
+                  stroke-opacity .22s ease, opacity .22s ease, width .2s ease;
+    }
+    .edge { fill: none; stroke: rgba(255,255,255,.07); stroke-width: 1; }
+    .run:not(.is-disabled):hover .edge,
+    .run:focus-visible .edge { stroke: var(--accent); stroke-opacity: .4; }
+
+    .focus-ring {
+      fill: none;
+      stroke: #fff;
+      stroke-width: 1.5;
+      stroke-opacity: 0;
+    }
+    .run:focus-visible .focus-ring,
+    .clear:focus-visible .focus-ring { stroke-opacity: .45; }
+
+    .icon-tile {
+      fill: var(--accent);
+      fill-opacity: .08;
+      stroke: var(--accent);
+      stroke-opacity: .2;
+      stroke-width: 1;
+    }
+    .run:not(.is-disabled):hover .icon-tile { fill-opacity: .14; stroke-opacity: .4; }
+
+    .title {
+      fill: #f4f5fb;
+      font-size: 23px;
+      font-weight: 650;
+      letter-spacing: .18px;
+    }
+    .status-text {
+      fill: #858ba0;
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: .85px;
+    }
+    .run.is-ready .status-text { fill: #aeb7cb; }
+    .run.is-partial .status-text { fill: #c4b486; }
+    .run.is-busy .status-text { fill: #d9deeb; }
+    .run.is-error .status-text { fill: #ffb1ba; }
+    .run.is-success .status-text { fill: #8ee5b4; }
+
+    .status-dot { fill: #6d7488; }
+    .run.is-ready .status-dot { fill: #6ee7a5; }
+    .run.is-partial .status-dot { fill: #f5c86f; }
+    .run.is-busy .status-dot { fill: var(--accent); animation: dotPulse 1.2s ease-in-out infinite; }
+    .run.is-error .status-dot { fill: #ff6b7a; }
+    .run.is-success .status-dot { fill: #6ee7a5; }
+    .run.is-ready .edge { stroke: var(--accent); stroke-opacity: .28; }
+    .run.is-busy .edge { stroke: var(--accent); stroke-opacity: .3; }
+    .run.is-success .edge { stroke: #64d99b; stroke-opacity: .24; }
+
+    .arrow-ring {
+      fill: rgba(255,255,255,.035);
+      stroke: rgba(255,255,255,.11);
+      stroke-width: 1;
+    }
+    .arrow { fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .run:not(.is-disabled):hover .arrow-ring { fill: var(--accent); stroke: var(--accent); }
+    .run:not(.is-disabled):hover .arrow { stroke: #080a10; }
+
+    .progress { opacity: .32; transition: opacity .22s ease; }
+    .run.is-busy .progress, .run.is-partial .progress { opacity: 1; }
+    .run.is-ready .progress { opacity: .5; }
+    .progress-track { fill: rgba(255,255,255,.075); }
+    .progress-fill { fill: var(--accent); }
+    .run.is-busy .progress-fill { filter: drop-shadow(0 0 5px var(--accent)); }
+
+    .chip {
+      fill: rgba(255,255,255,.035);
+      stroke: rgba(255,255,255,.1);
+      stroke-width: 1;
+    }
+    .clear:not(.is-disabled):hover .chip { stroke: rgba(255,116,134,.42); fill: rgba(255,116,134,.06); }
+    .clear.is-armed .chip { stroke: rgba(255,116,134,.3); }
+    .chip-text {
+      fill: #8f96a9;
+      font-size: 10.5px;
+      font-weight: 650;
+      letter-spacing: .8px;
+    }
+    .clear.is-armed .chip-text { fill: #b9c0d0; }
+    .clear.is-disabled { cursor: not-allowed; }
+    .clear.is-disabled .shell { opacity: .5; }
+
+    .wordmark {
+      fill: #cfd4e2;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2.6px;
+    }
+    .subtitle { fill: #6d7488; font-size: 12px; font-weight: 500; letter-spacing: .1px; }
+    .vault {
+      fill: #5f6577;
+      font-size: 9.5px;
+      font-weight: 650;
+      letter-spacing: 1.6px;
+    }
+
+    @keyframes dotPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .35; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; transition-duration: .01ms !important; }
+    }
+  ]]></style>
+
+  <!-- atmosphere -->
+  <rect width="1000" height="620" fill="url(#bg)"/>
+  <circle cx="92" cy="30" r="330" fill="url(#glowViolet)"/>
+  <circle cx="300" cy="-70" r="300" fill="url(#glowOrange)"/>
+  <circle cx="946" cy="150" r="330" fill="url(#glowGreen)"/>
+  <circle cx="520" cy="740" r="430" fill="url(#glowBlue)"/>
+  <rect width="1000" height="620" fill="url(#grid)" mask="url(#gridFade)" opacity=".7"/>
+  <rect width="1000" height="620" fill="url(#vignette)"/>
+
+  <!-- header -->
+  <text class="wordmark" x="52" y="52">LOCAL PLAY</text>
+  <text class="subtitle" x="52" y="74">Three builds · downloaded once, stored on this device</text>
+  <text class="vault" x="948" y="52" text-anchor="end">ON-DEVICE VAULT</text>
+
+  <!-- 01 · Minecraft -->
+  <g class="game" data-game="minecraft">
+    <g class="run" data-action="run" role="button" tabindex="0" aria-label="Run Minecraft">
+      <g class="shell">
+        <rect class="card" x="48" y="104" width="904" height="144" rx="26" fill="url(#card)"/>
+        <rect x="48" y="104" width="904" height="144" rx="26" fill="url(#minecraftGlow)"/>
+        <rect class="edge" x="48.5" y="104.5" width="903" height="143" rx="25.5"/>
+        <rect class="focus-ring" x="45" y="101" width="910" height="150" rx="29"/>
+
+        <rect class="icon-tile" x="76" y="136" width="56" height="56" rx="17"/>
+        <g transform="translate(104 166)">
+          <path d="M0-18 18.5-7.8 0 2.4-18.5-7.8Z" fill="#8cf0aa"/>
+          <path d="M-18.5-7.8 0 2.4v21.2l-18.5-10.3Z" fill="#42c777"/>
+          <path d="M18.5-7.8 0 2.4v21.2l18.5-10.3Z" fill="#28965c"/>
+          <path d="M-12.7-10.2-6.3-6.7l4.5-2.4 3.3 1.8 5.6-3" fill="none" stroke="#b4f8c7" stroke-width="1.25" stroke-linecap="round" opacity=".7"/>
+        </g>
+
+        <text class="title" x="152" y="160">MINECRAFT</text>
+        <circle class="status-dot" cx="152" cy="186" r="3.1"/>
+        <text class="status-text" x="163" y="189.5">CHECKING LOCAL CACHE</text>
+
+        <g class="progress">
+          <rect class="progress-track" x="152" y="218" width="508" height="4" rx="2"/>
+          <rect class="progress-fill" x="152" y="218" width="0" height="4" rx="2"/>
+        </g>
+
+        <circle class="arrow-ring" cx="890" cy="176" r="30"/>
+        <path class="arrow" d="M880 176h16M888 168l8 8-8 8"/>
+      </g>
+    </g>
+
+    <g class="clear" data-action="clear" role="button" tabindex="0" aria-disabled="true" aria-label="Clear Minecraft">
+      <g class="shell">
+        <rect class="chip" x="700" y="152" width="140" height="48" rx="16"/>
+        <rect class="focus-ring" x="697" y="149" width="146" height="54" rx="19"/>
+        <text class="chip-text" x="770" y="181" text-anchor="middle">NOTHING SAVED</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- 02 · Minecraft, stable build -->
+  <g class="game" data-game="minecraft-stable">
+    <g class="run" data-action="run" role="button" tabindex="0" aria-label="Run Minecraft stable build">
+      <g class="shell">
+        <rect class="card" x="48" y="268" width="904" height="144" rx="26" fill="url(#card)"/>
+        <rect x="48" y="268" width="904" height="144" rx="26" fill="url(#stableGlow)"/>
+        <rect class="edge" x="48.5" y="268.5" width="903" height="143" rx="25.5"/>
+        <rect class="focus-ring" x="45" y="265" width="910" height="150" rx="29"/>
+
+        <rect class="icon-tile" x="76" y="300" width="56" height="56" rx="17"/>
+        <g transform="translate(104 330)">
+          <path d="M0-18 18.5-7.8 0 2.4-18.5-7.8Z" fill="#b9cbff"/>
+          <path d="M-18.5-7.8 0 2.4v21.2l-18.5-10.3Z" fill="#6f93e8"/>
+          <path d="M18.5-7.8 0 2.4v21.2l18.5-10.3Z" fill="#4966b4"/>
+          <path d="M-12.7-10.2-6.3-6.7l4.5-2.4 3.3 1.8 5.6-3" fill="none" stroke="#dbe6ff" stroke-width="1.25" stroke-linecap="round" opacity=".7"/>
+        </g>
+
+        <text class="title" x="152" y="324">MINECRAFT · STABLE</text>
+        <circle class="status-dot" cx="152" cy="350" r="3.1"/>
+        <text class="status-text" x="163" y="353.5">CHECKING LOCAL CACHE</text>
+
+        <g class="progress">
+          <rect class="progress-track" x="152" y="382" width="508" height="4" rx="2"/>
+          <rect class="progress-fill" x="152" y="382" width="0" height="4" rx="2"/>
+        </g>
+
+        <circle class="arrow-ring" cx="890" cy="340" r="30"/>
+        <path class="arrow" d="M880 340h16M888 332l8 8-8 8"/>
+      </g>
+    </g>
+
+    <g class="clear" data-action="clear" role="button" tabindex="0" aria-disabled="true" aria-label="Clear Minecraft stable build">
+      <g class="shell">
+        <rect class="chip" x="700" y="316" width="140" height="48" rx="16"/>
+        <rect class="focus-ring" x="697" y="313" width="146" height="54" rx="19"/>
+        <text class="chip-text" x="770" y="345" text-anchor="middle">NOTHING SAVED</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- 03 · Fortnite -->
+  <g class="game" data-game="fortnite">
+    <g class="run" data-action="run" role="button" tabindex="0" aria-label="Run Fortnite">
+      <g class="shell">
+        <rect class="card" x="48" y="432" width="904" height="144" rx="26" fill="url(#card)"/>
+        <rect x="48" y="432" width="904" height="144" rx="26" fill="url(#fortniteGlow)"/>
+        <rect class="edge" x="48.5" y="432.5" width="903" height="143" rx="25.5"/>
+        <rect class="focus-ring" x="45" y="429" width="910" height="150" rx="29"/>
+
+        <rect class="icon-tile" x="76" y="464" width="56" height="56" rx="17"/>
+        <g transform="translate(-13.55 381.3)">
+          <path d="M110.7 89.2 103.4 111h8.7l-3.2 21.2 16-26.9h-8.3l5.3-16.1z"
+                fill="var(--accent-2)" stroke="#16111e" stroke-width="1.2" stroke-linejoin="round"/>
+          <circle cx="125" cy="92" r="2.2" fill="var(--accent)" opacity=".9"/>
+        </g>
+
+        <text class="title" x="152" y="488">FORTNITE</text>
+        <circle class="status-dot" cx="152" cy="514" r="3.1"/>
+        <text class="status-text" x="163" y="517.5">CHECKING LOCAL CACHE</text>
+
+        <g class="progress">
+          <rect class="progress-track" x="152" y="546" width="508" height="4" rx="2"/>
+          <rect class="progress-fill" x="152" y="546" width="0" height="4" rx="2"/>
+        </g>
+
+        <circle class="arrow-ring" cx="890" cy="504" r="30"/>
+        <path class="arrow" d="M880 504h16M888 496l8 8-8 8"/>
+      </g>
+    </g>
+
+    <g class="clear" data-action="clear" role="button" tabindex="0" aria-disabled="true" aria-label="Clear Fortnite">
+      <g class="shell">
+        <rect class="chip" x="700" y="480" width="140" height="48" rx="16"/>
+        <rect class="focus-ring" x="697" y="477" width="146" height="54" rx="19"/>
+        <text class="chip-text" x="770" y="509" text-anchor="middle">NOTHING SAVED</text>
+      </g>
+    </g>
+  </g>
+
+  <script type="application/ecmascript"><![CDATA[
+    (() => {
+      "use strict";
+
+      const DB_NAME = "local-play-vault";
+      const DB_VERSION = 1;
+
+      // Downloads are streamed to IndexedDB in 8 MB slices. Peak memory stays at
+      // roughly one slice, so a 1.8 GB build costs about 8 MB of JS heap, not 1.8 GB.
+      const CHUNK_BYTES = 8 * 1024 * 1024;
+
+      // While assembling the launch blob, collapse slices into bounded groups so
+      // the browser never holds a long list of live chunk references.
+      const GROUP_CHUNKS = 24;
+
+      const TRACK_WIDTH = 508;
+
+      // No key is stored in this file. Supply one at runtime with ?key=... or
+      // #key=..., or paste it once when prompted; it is kept in this browser's
+      // localStorage only. Get a key from a Google Cloud project with the Drive
+      // API enabled and add this page's origin to its HTTP-referrer allowlist.
+      const DRIVE_KEY_STORAGE = "local-play:drive-api-key";
+      let rejectedKey = "";
+
+      const GAMES = {
+        minecraft: {
+          index: "01",
+          name: "Minecraft",
+          file: "direct-connect.html",
+          id: "1BtaJlZLVgKrsJP9fmdPruYB8x_D0kFhL",
+          bytes: 89958610,
+          accent: "#68e7a2",
+          accent2: "#34d399"
+        },
+        "minecraft-stable": {
+          index: "02",
+          name: "Minecraft · Stable",
+          file: "Voltan-26.2-U2.1.html",
+          id: "11A1nskbpVSbon-1spMRo2w8D2uO235fl",
+          bytes: 81267908,
+          accent: "#8fb4ff",
+          accent2: "#a78bfa"
+        },
+        fortnite: {
+          index: "03",
+          name: "Fortnite",
+          file: "fortnite.html",
+          id: "1iGL-qAeaCqhpyo7YEFP0d5fIXy2jW6sk",
+          bytes: 1820740318,
+          accent: "#ff8b64",
+          accent2: "#b99cff"
+        }
+      };
+
+      const GAME_KEYS = Object.keys(GAMES);
+
+      const app = {
+        meta: {},
+        activeDownload: null,
+        launching: {},
+        clearing: {}
+      };
+
+      GAME_KEYS.forEach((key) => {
+        app.meta[key] = null;
+        app.launching[key] = false;
+        app.clearing[key] = false;
+      });
+
+      const ui = {};
+      let dbPromise = null;
+      let persistenceRequested = false;
+
+      class DownloadError extends Error {
+        constructor(code, message) {
+          super(message || code);
+          this.name = "DownloadError";
+          this.code = code;
+        }
+      }
+
+      function saveDriveKey(key) {
+        rejectedKey = "";
+        try { localStorage.setItem(DRIVE_KEY_STORAGE, key); } catch (_) {}
+      }
+
+      function forgetDriveKey() {
+        try { localStorage.removeItem(DRIVE_KEY_STORAGE); } catch (_) {}
+      }
+
+      function readDriveKey() {
+        try {
+          const params = new URLSearchParams(location.search);
+          const hash = location.hash.charAt(0) === "#" ? location.hash.slice(1) : location.hash;
+          const hashParams = new URLSearchParams(hash || "");
+          const fromUrl = params.get("key") || params.get("driveKey") ||
+            hashParams.get("key") || hashParams.get("driveKey");
+          if (fromUrl) {
+            const trimmed = fromUrl.trim();
+            if (trimmed && trimmed !== rejectedKey) {
+              saveDriveKey(trimmed);
+              return trimmed;
+            }
+          }
+        } catch (_) {}
+        try {
+          const saved = (localStorage.getItem(DRIVE_KEY_STORAGE) || "").trim();
+          return saved && saved !== rejectedKey ? saved : "";
+        } catch (_) { return ""; }
+      }
+
+      function ensureDriveKey() {
+        const existing = readDriveKey();
+        if (existing) return existing;
+
+        const entered = window.prompt(
+          "One-time setup: this page needs a Google Drive API key.\n\n" +
+          "Create a key in Google Cloud with the Drive API enabled, and add this " +
+          "page's address to the key's HTTP-referrer allowlist. It is stored only " +
+          "in this browser. You can revoke it at any time.",
+          ""
+        );
+        const key = (entered || "").trim();
+        if (key) saveDriveKey(key);
+        return key;
+      }
+
+      // The Drive REST media endpoint is the browser-reachable path: it sends
+      // CORS headers and supports Range. The public "uc?export=download"
+      // endpoint answers 403 to cross-site fetch, so it cannot be used here.
+      function downloadUrl(game, key) {
+        return "https://www.googleapis.com/drive/v3/files/" +
+          encodeURIComponent(game.id) + "?alt=media&key=" + encodeURIComponent(key);
+      }
+
+      function formatBytes(bytes) {
+        const value = Number(bytes) || 0;
+        if (value < 1000) return Math.round(value) + " B";
+        const units = ["KB", "MB", "GB", "TB"];
+        let n = value;
+        let unit = -1;
+        do {
+          n /= 1000;
+          unit += 1;
+        } while (n >= 1000 && unit < units.length - 1);
+        const digits = n >= 100 ? 0 : n >= 10 ? 1 : 2;
+        return n.toFixed(digits) + " " + units[unit];
+      }
+
+      function percentOf(bytes, total) {
+        if (!total || total <= 0) return 0;
+        return Math.max(0, Math.min(100, Math.floor((bytes / total) * 100)));
+      }
+
+      function openDb() {
+        if (dbPromise) return dbPromise;
+        dbPromise = new Promise((resolve, reject) => {
+          if (!("indexedDB" in window)) {
+            reject(new DownloadError("NO_INDEXEDDB", "IndexedDB is unavailable."));
+            return;
+          }
+          const request = indexedDB.open(DB_NAME, DB_VERSION);
+          request.onupgradeneeded = () => {
+            const db = request.result;
+            if (!db.objectStoreNames.contains("chunks")) {
+              const chunks = db.createObjectStore("chunks", { keyPath: ["game", "index"] });
+              chunks.createIndex("game", "game", { unique: false });
+            }
+            if (!db.objectStoreNames.contains("meta")) {
+              db.createObjectStore("meta", { keyPath: "game" });
+            }
+          };
+          request.onsuccess = () => {
+            const db = request.result;
+            db.onversionchange = () => db.close();
+            resolve(db);
+          };
+          request.onerror = () => reject(request.error || new DownloadError("DB_OPEN", "Could not open the local vault."));
+          request.onblocked = () => reject(new DownloadError("DB_BLOCKED", "Close other launcher tabs and try again."));
+        });
+        return dbPromise;
+      }
+
+      async function getMeta(gameKey) {
+        const db = await openDb();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction("meta", "readonly");
+          const request = tx.objectStore("meta").get(gameKey);
+          request.onsuccess = () => resolve(request.result || null);
+          request.onerror = () => reject(request.error);
+          tx.onabort = () => reject(tx.error);
+        });
+      }
+
+      async function putMeta(meta) {
+        const db = await openDb();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction("meta", "readwrite");
+          tx.objectStore("meta").put(meta);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(tx.error);
+        });
+      }
+
+      async function putChunk(gameKey, index, data) {
+        const db = await openDb();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction("chunks", "readwrite");
+          tx.objectStore("chunks").put({ game: gameKey, index: index, data: data });
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(tx.error);
+        });
+      }
+
+      async function countChunks(gameKey) {
+        const db = await openDb();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction("chunks", "readonly");
+          const request = tx.objectStore("chunks").index("game").count(IDBKeyRange.only(gameKey));
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+          tx.onabort = () => reject(tx.error);
+        });
+      }
+
+      async function clearStoredGame(gameKey) {
+        const db = await openDb();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(["chunks", "meta"], "readwrite");
+          tx.objectStore("meta").delete(gameKey);
+          const cursorRequest = tx.objectStore("chunks").index("game").openCursor(IDBKeyRange.only(gameKey));
+          cursorRequest.onsuccess = () => {
+            const cursor = cursorRequest.result;
+            if (cursor) {
+              cursor.delete();
+              cursor.continue();
+            }
+          };
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(tx.error);
+        });
+      }
+
+      async function requestPersistence() {
+        if (persistenceRequested) return;
+        persistenceRequested = true;
+        try {
+          if (navigator.storage && navigator.storage.persist) {
+            await navigator.storage.persist();
+          }
+        } catch (_) {}
+      }
+
+      function makeUi(el) {
+        return {
+          el: el,
+          status: el.querySelector(".status-text, .chip-text"),
+          fill: el.querySelector(".progress-fill")
+        };
+      }
+
+      function initUi() {
+        GAME_KEYS.forEach((gameKey) => {
+          const root = document.querySelector('.game[data-game="' + gameKey + '"]');
+          ui[gameKey] = {
+            run: makeUi(root.querySelector(".run")),
+            clear: makeUi(root.querySelector(".clear"))
+          };
+        });
+      }
+
+      function setFill(gameKey, percent) {
+        const target = ui[gameKey].run.fill;
+        if (!target) return;
+        target.setAttribute("width", String(Math.round((TRACK_WIDTH * percent) / 100)));
+      }
+
+      function clearModes(el) {
+        el.classList.remove("is-ready", "is-partial", "is-busy", "is-error", "is-success");
+      }
+
+      function modeClass(mode) {
+        if (mode === "ready") return "is-ready";
+        if (mode === "partial") return "is-partial";
+        if (mode === "downloading" || mode === "launching") return "is-busy";
+        if (mode === "error") return "is-error";
+        if (mode === "success") return "is-success";
+        return "";
+      }
+
+      function paint(gameKey, mode, options) {
+        const opts = options || {};
+        const game = GAMES[gameKey];
+        const meta = opts.meta !== undefined ? opts.meta : app.meta[gameKey];
+        const run = ui[gameKey].run;
+        const clear = ui[gameKey].clear;
+        const savedBytes = meta ? Number(meta.bytes) || 0 : 0;
+        const total = meta ? Number(meta.total) || game.bytes : game.bytes;
+        const hasData = !!meta && (!!meta.complete || savedBytes > 0);
+        const busy = app.activeDownload === gameKey || app.launching[gameKey] || app.clearing[gameKey];
+        const pct = meta && meta.complete ? 100 : percentOf(savedBytes, total);
+
+        clearModes(run.el);
+        clearModes(clear.el);
+        const runMode = modeClass(mode);
+        if (runMode) run.el.classList.add(runMode);
+        run.el.setAttribute("aria-busy", mode === "downloading" || mode === "launching" ? "true" : "false");
+        run.el.setAttribute("aria-disabled", mode === "downloading" || mode === "launching" || app.clearing[gameKey] ? "true" : "false");
+
+        let runText = "";
+        if (mode === "checking") runText = "CHECKING LOCAL CACHE";
+        else if (mode === "empty") runText = "DOWNLOAD & PLAY · " + formatBytes(game.bytes);
+        else if (mode === "partial") runText = "RESUME · " + pct + "% SAVED · " + formatBytes(savedBytes);
+        else if (mode === "ready") runText = "READY · " + formatBytes(total);
+        else if (mode === "downloading") runText = opts.text || "DOWNLOADING · " + pct + "%";
+        else if (mode === "launching") runText = opts.text || "ASSEMBLING LOCAL BUILD…";
+        else if (mode === "success") runText = opts.text || "READY · " + formatBytes(total);
+        else if (mode === "error") runText = opts.text || "DOWNLOAD FAILED · TAP TO RETRY";
+        else if (mode === "cleared") runText = "CLEARED · DOWNLOAD AGAIN";
+        else runText = "READY · " + formatBytes(total);
+
+        run.status.textContent = runText;
+        run.el.setAttribute("aria-label", "Run " + game.name + ". " + runText + ".");
+
+        const showProgress = mode === "downloading" || mode === "partial" || mode === "ready" || mode === "success";
+        setFill(gameKey, showProgress ? pct : 0);
+
+        clear.el.classList.toggle("is-armed", hasData);
+        let clearText = "NOTHING SAVED";
+        if (app.clearing[gameKey]) clearText = "CLEARING…";
+        else if (mode === "downloading" || mode === "launching") clearText = "IN USE";
+        else if (hasData && meta && meta.complete) clearText = "REMOVE · " + formatBytes(total);
+        else if (hasData) clearText = "REMOVE · " + pct + "%";
+
+        clear.status.textContent = clearText;
+        const clearDisabled = !hasData || busy;
+        clear.el.classList.toggle("is-disabled", clearDisabled);
+        clear.el.setAttribute("aria-disabled", clearDisabled ? "true" : "false");
+        clear.el.setAttribute("aria-label", "Clear " + game.name + ". " + clearText + ".");
+      }
+
+      function paintResting(gameKey) {
+        const meta = app.meta[gameKey];
+        if (meta && meta.complete) paint(gameKey, "ready", { meta: meta });
+        else if (meta && (Number(meta.bytes) || 0) > 0) paint(gameKey, "partial", { meta: meta });
+        else paint(gameKey, "empty", { meta: meta });
+      }
+
+      function isIdle(gameKey) {
+        return app.activeDownload !== gameKey && !app.launching[gameKey] && !app.clearing[gameKey];
+      }
+
+      async function refresh(gameKey) {
+        try {
+          const meta = await getMeta(gameKey);
+          app.meta[gameKey] = meta;
+          if (isIdle(gameKey)) paintResting(gameKey);
+        } catch (error) {
+          paint(gameKey, "error", { text: "LOCAL STORAGE UNAVAILABLE" });
+        }
+      }
+
+      async function refreshAll() {
+        GAME_KEYS.forEach((key) => paint(key, "checking"));
+        await Promise.all(GAME_KEYS.map((key) => refresh(key)));
+      }
+
+      function flash(gameKey, mode, text, duration) {
+        paint(gameKey, mode, { text: text });
+        window.setTimeout(() => {
+          if (isIdle(gameKey)) paintResting(gameKey);
+        }, duration || 3600);
+      }
+
+      async function downloadGame(gameKey, onProgress) {
+        const game = GAMES[gameKey];
+        const driveKey = ensureDriveKey();
+        if (!driveKey) throw new DownloadError("NO_KEY", "A Google Drive API key is required.");
+        let previous = await getMeta(gameKey);
+
+        if (previous && previous.complete) return previous;
+
+        let resumeAt = 0;
+        let chunkIndex = 0;
+        if (previous && (Number(previous.bytes) || 0) > 0) {
+          const actualChunks = await countChunks(gameKey);
+          const expectedChunks = Number(previous.chunks) || 0;
+          if (actualChunks === expectedChunks && Number(previous.bytes) < Number(previous.total || game.bytes)) {
+            resumeAt = Number(previous.bytes);
+            chunkIndex = expectedChunks;
+          } else {
+            await clearStoredGame(gameKey);
+            previous = null;
+          }
+        }
+
+        await requestPersistence();
+
+        const baseMeta = {
+          game: gameKey,
+          name: game.name,
+          file: game.file,
+          total: Number(previous && previous.total) || game.bytes,
+          bytes: resumeAt,
+          chunks: chunkIndex,
+          complete: false,
+          mime: "text/html",
+          updatedAt: Date.now()
+        };
+        await putMeta(baseMeta);
+
+        const headers = {};
+        if (resumeAt > 0) headers.Range = "bytes=" + resumeAt + "-";
+
+        let response;
+        try {
+          response = await fetch(downloadUrl(game, driveKey), {
+            mode: "cors",
+            cache: "no-store",
+            credentials: "omit",
+            headers: headers
+          });
+        } catch (error) {
+          throw new DownloadError("NETWORK", "Could not reach Google Drive.");
+        }
+
+        if (!response.ok && response.status !== 206) {
+          let detail = "";
+          try {
+            const body = await response.clone().text();
+            const parsed = JSON.parse(body);
+            detail = parsed && parsed.error && parsed.error.message ? parsed.error.message : "";
+          } catch (_) {}
+          if (response.status === 400 || response.status === 401 || response.status === 403) {
+            if (/api key|referer|credential|permission|not valid|blocked/i.test(detail)) {
+              rejectedKey = driveKey;
+              forgetDriveKey();
+              throw new DownloadError("API_KEY", detail || "The Google Drive API key was rejected.");
+            }
+          }
+          throw new DownloadError("HTTP_" + response.status, "Google Drive returned HTTP " + response.status + ".");
+        }
+
+        if (resumeAt > 0 && response.status === 200) {
+          await clearStoredGame(gameKey);
+          resumeAt = 0;
+          chunkIndex = 0;
+          await putMeta(baseMeta);
+        }
+
+        let total = Number(baseMeta.total) || game.bytes;
+        const contentLength = Number(response.headers.get("content-length"));
+        if (response.status === 206) {
+          if (contentLength > 0) total = resumeAt + contentLength;
+        } else if (contentLength > 0) {
+          total = contentLength;
+        }
+
+        if (!response.body || typeof response.body.getReader !== "function") {
+          throw new DownloadError("NO_STREAM", "This browser cannot stream the download.");
+        }
+
+        const reader = response.body.getReader();
+        let streamed = 0;
+        let saved = resumeAt;
+        let batch = [];
+        let batchBytes = 0;
+        let lastPaint = 0;
+        let failed = false;
+
+        const flush = async () => {
+          if (!batchBytes) return;
+          const blob = new Blob(batch, { type: "application/octet-stream" });
+          batch = [];
+          batchBytes = 0;
+          await putChunk(gameKey, chunkIndex, blob);
+          chunkIndex += 1;
+          saved += blob.size;
+          await putMeta({
+            game: gameKey,
+            name: game.name,
+            file: game.file,
+            total: total,
+            bytes: saved,
+            chunks: chunkIndex,
+            complete: false,
+            mime: "text/html",
+            updatedAt: Date.now()
+          });
+          if (onProgress) onProgress(saved, total);
+        };
+
+        try {
+          while (true) {
+            const read = await reader.read();
+            if (read.done) break;
+            if (!read.value) continue;
+            const bytes = read.value instanceof Uint8Array ? read.value : new Uint8Array(read.value);
+            batch.push(bytes);
+            batchBytes += bytes.byteLength;
+            streamed += bytes.byteLength;
+
+            const now = Date.now();
+            if (now - lastPaint > 110) {
+              lastPaint = now;
+              if (onProgress) onProgress(Math.min(resumeAt + streamed, total), total);
+            }
+
+            if (batchBytes >= CHUNK_BYTES) await flush();
+          }
+          await flush();
+        } catch (error) {
+          failed = true;
+          try { await reader.cancel(); } catch (_) {}
+          batch = [];
+          if (error && (error.name === "QuotaExceededError" || /quota|storage/i.test(error.message || ""))) {
+            throw new DownloadError("QUOTA", "Not enough local storage for this build.");
+          }
+          if (error instanceof DownloadError) throw error;
+          throw new DownloadError("WRITE_FAILED", "The local write was interrupted.");
+        } finally {
+          if (!failed) {
+            try { reader.releaseLock(); } catch (_) {}
+          }
+        }
+
+        if (total > 0 && saved < total) {
+          throw new DownloadError("INCOMPLETE", "The connection closed before the build finished downloading.");
+        }
+
+        const completed = {
+          game: gameKey,
+          name: game.name,
+          file: game.file,
+          total: total,
+          bytes: saved,
+          chunks: chunkIndex,
+          complete: true,
+          mime: "text/html",
+          savedAt: Date.now(),
+          updatedAt: Date.now()
+        };
+        await putMeta(completed);
+        if (onProgress) onProgress(saved, total);
+        return completed;
+      }
+
+      // Walk the vault one slice at a time with a cursor and fold slices into
+      // groups of GROUP_CHUNKS. Nothing here ever holds the whole build in heap.
+      async function assembleBlob(gameKey, meta) {
+        const db = await openDb();
+        const expected = meta && Number(meta.chunks) ? Number(meta.chunks) : 0;
+
+        return new Promise((resolve, reject) => {
+          let settled = false;
+          const fail = (error) => {
+            if (settled) return;
+            settled = true;
+            reject(error);
+          };
+
+          const tx = db.transaction("chunks", "readonly");
+          const cursorRequest = tx.objectStore("chunks")
+            .index("game")
+            .openCursor(IDBKeyRange.only(gameKey));
+
+          let group = [];
+          const groups = [];
+          let count = 0;
+
+          cursorRequest.onsuccess = () => {
+            const cursor = cursorRequest.result;
+            if (!cursor) return;
+
+            const row = cursor.value;
+            if (!row || row.index !== count) {
+              try { tx.abort(); } catch (_) {}
+              fail(new DownloadError("MISSING_CHUNKS", "The local build has a gap."));
+              return;
+            }
+
+            group.push(row.data instanceof Blob ? row.data : new Blob([row.data]));
+            count += 1;
+            if (group.length >= GROUP_CHUNKS) {
+              groups.push(new Blob(group, { type: "application/octet-stream" }));
+              group = [];
+            }
+            cursor.continue();
+          };
+
+          cursorRequest.onerror = () => fail(cursorRequest.error);
+          tx.onerror = () => fail(tx.error);
+          tx.onabort = () => fail(tx.error || new DownloadError("MISSING_CHUNKS", "The local build could not be read."));
+
+          tx.oncomplete = () => {
+            if (settled) return;
+            if (!count) return fail(new DownloadError("EMPTY", "No saved chunks were found."));
+            if (expected && count < expected) {
+              return fail(new DownloadError("MISSING_CHUNKS", "The local build is incomplete."));
+            }
+            if (group.length) groups.push(new Blob(group, { type: "application/octet-stream" }));
+            group = [];
+            const blob = new Blob(groups, { type: "text/html" });
+            groups.length = 0;
+            if (!blob.size) return fail(new DownloadError("EMPTY_BLOB", "The local build is empty."));
+            settled = true;
+            resolve(blob);
+          };
+        });
+      }
+
+      function openStage(game) {
+        let tab = null;
+        try {
+          tab = window.open("about:blank", "_blank");
+        } catch (_) {
+          return null;
+        }
+        if (!tab) return null;
+
+        try {
+          const doc = tab.document;
+          const head = doc.head || doc.documentElement.appendChild(doc.createElement("head"));
+          head.innerHTML = `
+<meta charset="utf-8">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preparing ${game.name}</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background:
+      radial-gradient(900px 600px at 15% 0%, color-mix(in srgb, ${game.accent} 13%, transparent), transparent 70%),
+      radial-gradient(800px 600px at 100% 100%, rgba(92, 111, 255, .11), transparent 70%),
+      #05060a;
+    color: #f6f7fb;
+    font-family: "SF Pro Display", Inter, "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+  }
+  .stage {
+    position: relative;
+    width: min(760px, calc(100vw - 48px));
+    padding: 34px 38px 28px;
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 28px;
+    background: linear-gradient(145deg, rgba(22,26,41,.94), rgba(10,12,20,.96));
+    box-shadow: 0 30px 90px rgba(0,0,0,.55), inset 0 1px rgba(255,255,255,.05);
+    overflow: hidden;
+  }
+  .top { position: relative; display: flex; justify-content: space-between; align-items: center; margin-bottom: 74px; }
+  .tag { display: inline-flex; align-items: center; gap: 9px; font-size: 10px; font-weight: 700; letter-spacing: .22em; color: #aeb6ca; }
+  .tag i { width: 7px; height: 7px; border-radius: 50%; background: ${game.accent}; box-shadow: 0 0 12px ${game.accent}; animation: pulse 1.4s ease-in-out infinite; }
+  .idx { font-size: 11px; letter-spacing: .2em; color: rgba(255,255,255,.27); font-variant-numeric: tabular-nums; }
+  h1 { position: relative; margin: 0 0 14px; font-size: clamp(42px, 8vw, 78px); line-height: .92; letter-spacing: -.055em; font-weight: 650; }
+  h1 em { font-style: normal; color: ${game.accent}; }
+  .phase { position: relative; margin: 0 0 30px; color: #c5cada; font-size: 14px; font-weight: 500; }
+  .meter { position: relative; height: 6px; border-radius: 99px; overflow: hidden; background: rgba(255,255,255,.08); }
+  .meter i { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, ${game.accent2}, ${game.accent}); box-shadow: 0 0 14px ${game.accent}; transition: width .22s ease; }
+  .row { position: relative; display: flex; justify-content: space-between; gap: 20px; margin-top: 14px; font-size: 11px; font-weight: 600; letter-spacing: .09em; color: #8b92a6; font-variant-numeric: tabular-nums; }
+  .pct { color: #e9ecf5; }
+  .note { position: relative; margin: 48px 0 0; padding-top: 18px; border-top: 1px solid rgba(255,255,255,.06); color: #686f83; font-size: 11px; }
+  .note code { color: #aab2c7; font-family: "SFMono-Regular", Consolas, monospace; }
+  .stage.is-error .meter i { background: #ff6b7a; box-shadow: 0 0 14px #ff6b7a; }
+  .stage.is-error .tag i { background: #ff6b7a; box-shadow: 0 0 12px #ff6b7a; }
+  .stage.is-error h1 em { color: #ff8a97; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  @media (max-width: 560px) {
+    .stage { padding: 26px 24px 22px; }
+    .top { margin-bottom: 52px; }
+    .note { margin-top: 32px; }
+  }
+</style>`;
+          const body = doc.body || doc.documentElement.appendChild(doc.createElement("body"));
+          body.innerHTML = `
+  <main class="stage">
+    <div class="top">
+      <span class="tag"><i></i> LOCAL PLAY</span>
+      <span class="idx">${game.index} / 03</span>
+    </div>
+    <h1>Preparing<br><em>${game.name}</em></h1>
+    <p class="phase">Opening a blank tab and checking the local vault…</p>
+    <div class="meter"><i></i></div>
+    <div class="row"><span class="pct">0%</span><span class="detail">0 B</span></div>
+    <p class="note">This tab stays <code>about:blank</code>. Everything runs from the copy on your device.</p>
+  </main>`;
+          doc.title = "Preparing " + game.name;
+          tab.focus();
+          return tab;
+        } catch (error) {
+          try { tab.close(); } catch (_) {}
+          return null;
+        }
+      }
+
+      function updateStage(tab, percent, phase, detail) {
+        if (!tab || tab.closed) return;
+        try {
+          const doc = tab.document;
+          const fill = doc.querySelector(".meter i");
+          const phaseEl = doc.querySelector(".phase");
+          const pctEl = doc.querySelector(".pct");
+          const detailEl = doc.querySelector(".detail");
+          if (fill) fill.style.width = Math.max(0, Math.min(100, percent)) + "%";
+          if (phaseEl && phase) phaseEl.textContent = phase;
+          if (pctEl) pctEl.textContent = Math.round(percent) + "%";
+          if (detailEl && detail !== undefined) detailEl.textContent = detail;
+        } catch (_) {}
+      }
+
+      function failStage(tab, title, detail) {
+        if (!tab || tab.closed) return;
+        try {
+          const doc = tab.document;
+          const stage = doc.querySelector(".stage");
+          if (stage) stage.classList.add("is-error");
+          doc.title = title;
+          const heading = doc.querySelector("h1");
+          if (heading) heading.innerHTML = title + "<br><em>paused</em>";
+          const phase = doc.querySelector(".phase");
+          if (phase) phase.textContent = detail;
+          const pct = doc.querySelector(".pct");
+          if (pct) pct.textContent = "—";
+          const meter = doc.querySelector(".meter i");
+          if (meter) meter.style.width = "100%";
+          const note = doc.querySelector(".note");
+          if (note) note.textContent = "Close this tab, then tap the row again in the launcher to retry.";
+        } catch (_) {}
+      }
+
+      function launchBlob(tab, game, blob) {
+        const url = URL.createObjectURL(blob);
+        const doc = tab.document;
+        const iframe = doc.createElement("iframe");
+        iframe.title = game.name;
+        iframe.allow = "fullscreen; autoplay; gamepad";
+        iframe.allowFullscreen = true;
+        iframe.referrerPolicy = "no-referrer";
+        iframe.style.cssText = "position:fixed;inset:0;width:100%;height:100%;border:0;background:#000;display:block";
+        iframe.src = url;
+
+        doc.title = game.name;
+        doc.documentElement.style.background = "#000";
+        doc.body.style.cssText = "margin:0;padding:0;overflow:hidden;background:#000;display:block";
+        doc.body.replaceChildren(iframe);
+
+        window.setTimeout(() => {
+          try {
+            iframe.focus();
+            tab.focus();
+          } catch (_) {}
+        }, 140);
+
+        try {
+          tab.addEventListener("pagehide", () => URL.revokeObjectURL(url), { once: true });
+        } catch (_) {
+          window.setTimeout(() => URL.revokeObjectURL(url), 60 * 60 * 1000);
+        }
+        return url;
+      }
+
+      function friendlyError(error) {
+        if (!navigator.onLine) return "OFFLINE · CHECK YOUR CONNECTION";
+        if (!error) return "DOWNLOAD FAILED · TAP TO RETRY";
+        if (error.code === "QUOTA" || error.name === "QuotaExceededError") return "NOT ENOUGH STORAGE · CLEAR A BUILD";
+        if (error.code === "API_KEY") return "DRIVE KEY BLOCKED FOR THIS PAGE · TAP TO RE-ENTER";
+        if (error.code === "NO_KEY") return "DRIVE API KEY REQUIRED · TAP TO ADD ONE";
+        if (error.code === "HTTP_429") return "DRIVE RATE-LIMITED · TRY AGAIN SOON";
+        if (error.code === "HTTP_404") return "FILE NOT FOUND ON DRIVE";
+        if (error.code === "NO_STREAM") return "THIS BROWSER CANNOT STREAM THE FILE";
+        if (error.code === "MISSING_CHUNKS" || error.code === "EMPTY") return "LOCAL SAVE IS CORRUPTED · CLEAR IT";
+        if (error.code === "NETWORK") return "NETWORK LOST · TAP TO RESUME";
+        if (error.code === "INCOMPLETE") return "DOWNLOAD PAUSED · TAP TO RESUME";
+        return "DOWNLOAD FAILED · TAP TO RETRY";
+      }
+
+      async function runGame(gameKey) {
+        const game = GAMES[gameKey];
+
+        if (app.activeDownload && app.activeDownload !== gameKey) {
+          flash(gameKey, "error", "ONE DOWNLOAD AT A TIME", 2600);
+          return;
+        }
+        if (app.activeDownload === gameKey || app.launching[gameKey] || app.clearing[gameKey]) return;
+
+        const metaNow = app.meta[gameKey];
+        if ((!metaNow || !metaNow.complete) && !readDriveKey()) {
+          const key = ensureDriveKey();
+          if (!key) {
+            flash(gameKey, "error", "DRIVE API KEY REQUIRED", 4400);
+            return;
+          }
+        }
+
+        const tab = openStage(game);
+        if (!tab) {
+          flash(gameKey, "error", "ALLOW POP-UPS, THEN TAP THE ROW", 4400);
+          return;
+        }
+
+        app.launching[gameKey] = true;
+        const startedAt = Date.now();
+        let lastBytes = (app.meta[gameKey] && Number(app.meta[gameKey].bytes)) || 0;
+        let lastTime = startedAt;
+        let failed = false;
+        let errorText = "";
+
+        try {
+          let meta = await getMeta(gameKey);
+          app.meta[gameKey] = meta;
+
+          if (!meta || !meta.complete) {
+            app.activeDownload = gameKey;
+            paint(gameKey, "downloading", {
+              meta: meta,
+              text: meta && meta.bytes ? "RESUMING · " + percentOf(meta.bytes, meta.total) + "%" : "CONNECTING TO GOOGLE DRIVE…"
+            });
+            updateStage(tab, 0, meta && meta.bytes ? "Resuming the download" : "Downloading from Google Drive", "Connecting…");
+
+            meta = await downloadGame(gameKey, (bytes, total) => {
+              const pct = percentOf(bytes, total);
+              const now = Date.now();
+              const elapsed = Math.max(1, now - lastTime);
+              const speed = Math.max(0, bytes - lastBytes) / (elapsed / 1000);
+              lastBytes = bytes;
+              lastTime = now;
+              app.meta[gameKey] = { game: gameKey, bytes: bytes, total: total, complete: false };
+              paint(gameKey, "downloading", {
+                meta: app.meta[gameKey],
+                text: "DOWNLOADING · " + pct + "% · " + formatBytes(bytes) + " / " + formatBytes(total)
+              });
+              updateStage(
+                tab,
+                pct,
+                pct < 100 ? "Downloading from Google Drive" : "Download complete",
+                formatBytes(bytes) + " of " + formatBytes(total) +
+                  (speed > 0 ? "  ·  " + formatBytes(speed) + "/s" : "")
+              );
+            });
+
+            app.meta[gameKey] = meta;
+            app.activeDownload = null;
+          }
+
+          if (tab.closed) {
+            paint(gameKey, "success", { meta: meta, text: "SAVED · TAP TO PLAY" });
+            return;
+          }
+
+          paint(gameKey, "launching", { meta: meta, text: "ASSEMBLING LOCAL BUILD…" });
+          updateStage(tab, 94, "Assembling from the local vault", "Reading saved slices…");
+
+          const blob = await assembleBlob(gameKey, meta);
+          updateStage(tab, 100, "Starting game", formatBytes(blob.size) + " ready");
+
+          if (tab.closed) {
+            paint(gameKey, "success", { meta: meta, text: "SAVED · TAP TO PLAY" });
+            return;
+          }
+
+          launchBlob(tab, game, blob);
+          paint(gameKey, "success", { meta: meta, text: "PLAYING IN NEW TAB" });
+        } catch (error) {
+          failed = true;
+          if (error && error.code === "QUOTA") {
+            try { await clearStoredGame(gameKey); } catch (_) {}
+            app.meta[gameKey] = null;
+          }
+          errorText = friendlyError(error);
+          console.error("[local-play]", error);
+          paint(gameKey, "error", { text: errorText, meta: app.meta[gameKey] });
+          failStage(tab, "Download", errorText + ". " + game.name + " is safe to retry from the launcher.");
+        } finally {
+          app.activeDownload = null;
+          app.launching[gameKey] = false;
+          if (failed) paint(gameKey, "error", { text: errorText, meta: app.meta[gameKey] });
+          else await refresh(gameKey);
+        }
+      }
+
+      async function clearGame(gameKey) {
+        if (!isIdle(gameKey)) return;
+        const meta = app.meta[gameKey];
+        if (!meta || (!meta.complete && !(Number(meta.bytes) > 0))) return;
+
+        app.clearing[gameKey] = true;
+        paint(gameKey, "cleared", { meta: meta, text: "CLEARING LOCAL COPY…" });
+        try {
+          await clearStoredGame(gameKey);
+          app.meta[gameKey] = null;
+          paint(gameKey, "cleared", { meta: null, text: "CLEARED · DOWNLOAD AGAIN" });
+          window.setTimeout(() => {
+            if (isIdle(gameKey)) paintResting(gameKey);
+          }, 1900);
+        } catch (error) {
+          console.error("[local-play]", error);
+          paint(gameKey, "error", { meta: meta, text: "COULD NOT CLEAR LOCAL DATA" });
+        } finally {
+          app.clearing[gameKey] = false;
+        }
+      }
+
+      function bind() {
+        document.querySelectorAll(".run, .clear").forEach((el) => {
+          const root = el.closest(".game");
+          if (!root) return;
+          const gameKey = root.getAttribute("data-game");
+          const action = el.getAttribute("data-action");
+          const fire = () => {
+            if (action === "run") runGame(gameKey);
+            else clearGame(gameKey);
+          };
+
+          el.addEventListener("click", fire);
+          el.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
+              event.preventDefault();
+              fire();
+            }
+          });
+        });
+      }
+
+      async function init() {
+        initUi();
+        bind();
+        await refreshAll();
+      }
+
+      init();
+    })();
+  ]]></script>
+</svg>
