@@ -324,7 +324,7 @@
           <circle cx="125" cy="92" r="2.2" fill="var(--accent)" opacity=".9"/>
         </g>
 
-        <text class="title" x="152" y="488">FORTNITE</text>
+        <text class="title" x="152" y="488">FORTNITE- Doesn't Work</text>
         <circle class="status-dot" cx="152" cy="514" r="3.1"/>
         <text class="status-text" x="163" y="517.5">CHECKING LOCAL CACHE</text>
 
