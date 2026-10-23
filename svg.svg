@@ -285,7 +285,7 @@
           <path d="M-12.7-10.2-6.3-6.7l4.5-2.4 3.3 1.8 5.6-3" fill="none" stroke="#dbe6ff" stroke-width="1.25" stroke-linecap="round" opacity=".7"/>
         </g>
 
-        <text class="title" x="152" y="324">MINECRAFT · STABLE</text>
+        <text class="title" x="152" y="324">MINECRAFT · STABLE - NO MULTIPLAYER</text>
         <circle class="status-dot" cx="152" cy="350" r="3.1"/>
         <text class="status-text" x="163" y="353.5">CHECKING LOCAL CACHE</text>
 
