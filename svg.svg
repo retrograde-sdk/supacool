@@ -364,10 +364,11 @@
 
       const TRACK_WIDTH = 508;
 
-      // No key is stored in this file. Supply one at runtime with ?key=... or
-      // #key=..., or paste it once when prompted; it is kept in this browser's
-      // localStorage only. Get a key from a Google Cloud project with the Drive
-      // API enabled and add this page's origin to its HTTP-referrer allowlist.
+      // Ships with the project's Drive key so the launcher works with no setup.
+      // It is a public, referrer-restricted key: it only answers requests from
+      // this app's own origins. Override it without editing this file via
+      // ?key=... or #key=..., which is stored in this browser's localStorage.
+      const DRIVE_API_KEY = "AIzaSyBDfJdhDDfTG4ptZhhPYI5js3me3E9M0dk";
       const DRIVE_KEY_STORAGE = "local-play:drive-api-key";
       let rejectedKey = "";
 
@@ -454,8 +455,9 @@
         } catch (_) {}
         try {
           const saved = (localStorage.getItem(DRIVE_KEY_STORAGE) || "").trim();
-          return saved && saved !== rejectedKey ? saved : "";
-        } catch (_) { return ""; }
+          if (saved && saved !== rejectedKey) return saved;
+        } catch (_) {}
+        return DRIVE_API_KEY && DRIVE_API_KEY !== rejectedKey ? DRIVE_API_KEY : "";
       }
 
       function ensureDriveKey() {
