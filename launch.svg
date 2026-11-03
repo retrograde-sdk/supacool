@@ -79,7 +79,8 @@ var CFG = {
   apiKey: "AIzaSyC5HrSEXwPdoHF3jCvp6gUwzCCyjc6Mimo",
   chunk: 4194304,
   game: "__fortnite.html",
-  sw: "fn-launch-sw.js"
+  sw: "fn-launch-sw.js",
+  build: "9dd25dc11a"
 };
 var DB_NAME = "fn-launcher-vault";
 var DB_VERSION = 1;
@@ -357,11 +358,41 @@ function checkDocument() {
                     "). Check that the Drive file is the single-file build and shared as 'Anyone with the link'.");
 }
 
+function askBuild(worker) {
+  return new Promise(function (res) {
+    if (!worker) { res(""); return; }
+    var ch = new MessageChannel(), done = false;
+    var t = setTimeout(function () { if (!done) { done = true; res(""); } }, 1500);
+    ch.port1.onmessage = function (e) { if (done) return; done = true; clearTimeout(t); res(String(e.data || "")); };
+    try { worker.postMessage({ q: "build" }, [ch.port2]); } catch (e) { if (!done) { done = true; clearTimeout(t); res(""); } }
+  });
+}
+
+// The worker url carries a day stamp and this build, and the registration forbids the HTTP cache
+// for the script: a CDN that keeps the previous worker must not make the page believe it is current.
 async function ensureWorker() {
   if (!isSecureContext) throw new Error("This page is not a secure context. Serve it over https:// (localhost counts) so it can register its worker.");
   if (!("serviceWorker" in navigator)) throw new Error("This browser has no service worker support, so the game cannot be served isolated here.");
-  var reg = await navigator.serviceWorker.register(CFG.sw, { scope: "./" });
+  var day = new Date().toISOString().slice(0, 10);
+  var url = CFG.sw + "?d=" + day + "&b=" + encodeURIComponent(CFG.build || "0");
+  var reg = await navigator.serviceWorker.register(url, { scope: "./", updateViaCache: "none" });
   await navigator.serviceWorker.ready;
+  try { await reg.update(); } catch (e) { /* an offline update is not fatal: the cached worker runs */ }
+  var run = reg.active || reg.waiting || reg.installing;
+  var got = await askBuild(run);
+  diag("worker " + (got || "unknown") + "  expected " + (CFG.build || "?"));
+  if (got && CFG.build && got !== CFG.build) {
+    // An older worker answers: drop it and come back once, so the next load is this build.
+    var key = "fnw-update";
+    if (sessionStorage.getItem(key) !== CFG.build) {
+      sessionStorage.setItem(key, CFG.build);
+      try { await reg.unregister(); } catch (e) { /* reload anyway */ }
+      location.reload();
+      await new Promise(function () {});       // the reload ends this document
+    }
+    throw new Error("An older worker is still installed (" + got + " instead of " + CFG.build +
+                    "). Reload this page: the stale copy was just dropped.");
+  }
   return reg;
 }
 
@@ -390,7 +421,8 @@ async function start() {
     say("Linking the launcher's worker...");
     note("the worker is what grants cross-origin isolation");
     var reg = await ensureWorker();
-    diag("worker " + (reg.active ? "active" : "pending") + "  scope " + new URL(reg.scope).pathname);
+    diag("worker " + (CFG.build || "?") + "  " + (reg.active ? "active" : "pending") +
+         "  scope " + new URL(reg.scope).pathname);
 
     var meta = await getMeta();
     var source = srcOverride || ("drive:" + CFG.fileId);

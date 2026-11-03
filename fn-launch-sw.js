@@ -5,6 +5,7 @@
 var DB_NAME = "fn-launcher-vault";
 var DB_VERSION = 1;
 var GAME_NAME = "__fortnite.html";
+var BUILD = "9dd25dc11a";                          // the launcher checks this is the worker it expected
 var GAME_PATH = new URL(GAME_NAME, self.registration.scope).pathname;
 
 var POLICY = {
@@ -23,6 +24,13 @@ self.addEventListener("install", function (event) {
 
 self.addEventListener("activate", function (event) {
   event.waitUntil(self.clients.claim());
+});
+
+// The launcher asks which build is running, because a CDN can keep serving the previous worker
+// while the page is new (measured on jsDelivr: 4,954 B of the old worker for a 14 KB new one).
+self.addEventListener("message", function (event) {
+  var port = event.ports && event.ports[0];
+  if (port && event.data && event.data.q === "build") port.postMessage(BUILD);
 });
 
 function openDb() {
