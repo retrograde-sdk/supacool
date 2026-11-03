@@ -94,6 +94,90 @@ function bodyFor(db, meta, start, end) {
   });
 }
 
+// THE BLOB SHAPE, SERVED AS THE DOCUMENT IT CARRIES. `make single` ships by default a LAUNCHER
+// document that carries the app's own html inert and hands the window to a blob: URL. A blob
+// document is NOT a client this worker controls - measured on Chrome 155: inside it
+// `navigator.serviceWorker.controller` is null and a `fetch` from it reaches the network, not this
+// worker - so the app's own payload gate (a `fetch` carrying Range) would leave for the network,
+// find no file behind a worker-served path, and stop the game on "the payload is embedded in this
+// file, but this place cannot range-read it". Serving the *carried app* as the document removes
+// the hop: the app runs at this worker's URL, and its gate passes (measured).
+//
+// WHAT THIS STILL CANNOT DO, and it is why the launcher cannot run the game out of storage: the
+// app's actual reads are SYNCHRONOUS XHRs (`fn_singlefile`'s `httpSlice`: `x.open('GET', url,
+// false)`, because the engine's wasm needs the bytes on the same turn) and Chrome does not route
+// synchronous XHR through a service worker. Measured in a document this worker serves:
+// fetch+Range 206, async XHR+Range 206, sync XHR+Range 404 (it left for the network). So the
+// payload must be reachable over the network at a Range-capable URL - `serve.py` beside the file,
+// or a host that answers Range and sends COOP/COEP. See AGENTS.md.
+var APP_OPEN = '<script type="text/plain" id="fnweb-app">';
+var APP_CLOSE = "</script>";
+var SENTINEL = 1;             // 0x01 stands in for '<' inside the inert block (see fn_singlefile)
+var APP_SPAN = 96 << 20;      // the app document is ~30 MB; never scan past this
+var APP_CACHE = null;         // {stamp, bytes}, dropped when the vault changes
+
+function indexOfBytes(hay, needle, from) {
+  var n = needle.length;
+  outer: for (var i = from || 0; i + n <= hay.length; i++) {
+    for (var j = 0; j < n; j++) if (hay[i + j] !== needle.charCodeAt(j)) continue outer;
+    return i;
+  }
+  return -1;
+}
+
+// A contiguous [start, end) read of the vault into one array. Only the small document read below
+// uses it; the game's own reads stay streamed one chunk at a time (bodyFor).
+function vaultBytes(db, meta, start, end) {
+  var cs = meta.chunkSize;
+  var out = new Uint8Array(Math.max(0, end - start));
+  var pos = start;
+  return new Promise(function (res, rej) {
+    (function step() {
+      if (pos >= end) { res(out); return; }
+      var idx = Math.floor(pos / cs);
+      readOnly(db, "chunks", idx).then(function (chunk) {
+        if (!chunk) { rej(new Error("vault is missing chunk " + idx)); return; }
+        var view = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+        var base = idx * cs;
+        var from = pos - base;
+        var take = Math.min(view.length, end - base) - from;
+        if (take <= 0) { rej(new Error("vault chunk " + idx + " is short")); return; }
+        out.set(view.subarray(from, from + take), pos - start);
+        pos += take;
+        step();
+      }).catch(rej);
+    })();
+  });
+}
+
+// The app's own html, out of the carrier's inert block - or null when the vault already holds one
+// document (the `--launch inline` build), in which case the vault's bytes ARE the document.
+function readApp(db, meta) {
+  if (APP_CACHE && APP_CACHE.stamp === (meta.storedAt || meta.size)) return Promise.resolve(APP_CACHE.bytes);
+  var limit = Math.min(meta.size, APP_SPAN);
+  function scanTo(size) {
+    return vaultBytes(db, meta, 0, Math.min(size, limit)).then(function (all) {
+      var open = indexOfBytes(all, APP_OPEN, 0);
+      if (open >= 0) {
+        var from = open + APP_OPEN.length;
+        var close = indexOfBytes(all, APP_CLOSE, from);   // the app's own closes are escaped
+        if (close >= 0) {
+          var text = all.subarray(from, close);
+          var out = new Uint8Array(text.length);
+          for (var i = 0; i < text.length; i++) out[i] = text[i] === SENTINEL ? 60 : text[i];
+          APP_CACHE = { stamp: meta.storedAt || meta.size, bytes: out };
+          console.log("[fn-launch] the vault holds the blob shape: serving the app it carries ("
+            + (out.length >> 10) + " KiB) as the document, payload reads straight through at p0");
+          return out;
+        }
+      }
+      if (size >= limit) return null;
+      return scanTo(Math.min(size + (8 << 20), limit));
+    });
+  }
+  return scanTo(8 << 20);
+}
+
 function serve(request) {
   return openDb().then(function (db) {
     return readOnly(db, "meta", "game").then(function (meta) {
@@ -109,13 +193,20 @@ function serve(request) {
         var h416 = Object.assign({}, POLICY, { "Content-Range": "bytes */" + size });
         return new Response("Range not satisfiable", { status: 416, headers: h416 });
       }
-      var start = range ? range[0] : 0;
-      var end = range ? range[1] : size;
+      if (!range) {
+        // A full read IS the document, and for the blob shape that is the app the carrier carries.
+        return readApp(db, meta).then(function (doc) {
+          var all = Object.assign({}, POLICY, { "Content-Length": String(doc ? doc.length : size) });
+          if (request.method === "HEAD") return new Response(null, { status: 200, headers: all });
+          return new Response(doc || bodyFor(db, meta, 0, size), { status: 200, headers: all });
+        });
+      }
+      var start = range[0];
+      var end = range[1];
       var headers = Object.assign({}, POLICY, { "Content-Length": String(end - start) });
-      if (range) headers["Content-Range"] = "bytes " + start + "-" + (end - 1) + "/" + size;
-      var status = range ? 206 : 200;
-      if (request.method === "HEAD") return new Response(null, { status: status, headers: headers });
-      return new Response(bodyFor(db, meta, start, end), { status: status, headers: headers });
+      headers["Content-Range"] = "bytes " + start + "-" + (end - 1) + "/" + size;
+      if (request.method === "HEAD") return new Response(null, { status: 206, headers: headers });
+      return new Response(bodyFor(db, meta, start, end), { status: 206, headers: headers });
     });
   }).catch(function (e) {
     return new Response("launcher vault error: " + (e && e.message ? e.message : e), {
