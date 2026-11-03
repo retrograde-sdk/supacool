@@ -261,15 +261,20 @@ function resetBuffers() {
   head = "";
 }
 
+// Chunks are stored as BLOBS, not arrays: the payload is handed to the game as one Blob composed of
+// these handles, and Chrome keeps blob data on disk. Handing it an array-of-4MiB-arrays instead
+// would pin 1.4 GB in the heap, which is exactly what this design exists to avoid.
 function flushChunk() {
   if (!off) return Promise.resolve();
-  var piece = buf.slice(0, off);
+  var piece = new Blob([buf.slice(0, off)]);
   var at = idx;
   idx += 1;
   off = 0;
   buf = new Uint8Array(CFG.chunk);
   return put("chunks", at, piece);
 }
+
+
 
 async function download(total, name) {
   var url = srcOverride || mediaUrl();
@@ -425,6 +430,9 @@ async function start() {
     el("go").classList.remove("off");
     await sleep(220);
     say("Launching...");
+    // No blob is made here on purpose: one made in this document is dead once the game document
+    // loads (measured), so the served document's own shim composes it from the same vault.
+    note("the game's page builds the payload blob on its own side");
     location.replace(CFG.game);
   } catch (e) {
     // the status line stays short; the sentence that says what to fix goes under it

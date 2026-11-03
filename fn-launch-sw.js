@@ -67,30 +67,42 @@ function parseRange(header, size) {
   return [start, end];
 }
 
-// The chunked body: pull one chunk at a time, slice the edges, never hold more than one.
-function bodyFor(db, meta, start, end) {
-  var cs = meta.chunkSize;
-  var pos = start;
-  return new ReadableStream({
-    pull: function (ctrl) {
-      if (pos >= end) { ctrl.close(); return Promise.resolve(); }
-      var idx = Math.floor(pos / cs);
-      return readOnly(db, "chunks", idx).then(function (chunk) {
-        if (!chunk) {
-          ctrl.error(new Error("vault is missing chunk " + idx + " - the download did not finish"));
-          return;
-        }
-        var base = idx * cs;
-        var from = pos - base;
-        var to = Math.min(chunk.byteLength, end - base);
-        if (to <= from) {
-          ctrl.error(new Error("vault chunk " + idx + " is short (" + chunk.byteLength + " bytes)"));
-          return;
-        }
-        ctrl.enqueue(chunk.slice(from, to));
-        pos = base + to;
-      });
+// THE VAULT IS ONE BLOB, and the game reads it as a blob: URL. The chunks stay the resume ledger
+// (a chunk record per CFG.chunk bytes, so a dropped download continues where it stopped), but each
+// one is stored as a Blob and the whole file is only ever a Blob that names them: Chrome keeps blob
+// data on disk, so composing 1.4 GB of chunks costs a few hundred Blob handles and no payload
+// bytes in the heap. That matters because the game's reads are SYNCHRONOUS XHRs and the only thing
+// in a browser that answers one of those with Range is a blob: URL (measured: 206 and a correct
+// Content-Range, while the same sync XHR to a worker-served path leaves for the network and 404s).
+var BLOB_CACHE = null;        // {stamp, blob}, dropped when the vault changes
+
+function blobFor(db, meta) {
+  var stamp = meta.storedAt || meta.size;
+  if (BLOB_CACHE && BLOB_CACHE.stamp === stamp) return Promise.resolve(BLOB_CACHE.blob);
+  var n = meta.chunks || 0;
+  return new Promise(function (res, rej) {
+    if (!n) {
+      var empty = new Blob([]);
+      BLOB_CACHE = { stamp: stamp, blob: empty };
+      res(empty);
+      return;
     }
+    var parts = new Array(n), left = n;
+    var store = db.transaction("chunks", "readonly").objectStore("chunks");
+    for (var i = 0; i < n; i++) (function (i) {
+      var q = store.get(i);
+      q.onsuccess = function () {
+        var v = q.result;
+        if (v == null) { rej(new Error("vault is missing chunk " + i + " - the download did not finish")); return; }
+        parts[i] = v instanceof Blob ? v : new Blob([v]);
+        left -= 1;
+        if (left) return;
+        var blob = new Blob(parts);
+        BLOB_CACHE = { stamp: stamp, blob: blob };
+        res(blob);
+      };
+      q.onerror = function () { rej(q.error); };
+    })(i);
   });
 }
 
@@ -125,29 +137,12 @@ function indexOfBytes(hay, needle, from) {
   return -1;
 }
 
-// A contiguous [start, end) read of the vault into one array. Only the small document read below
-// uses it; the game's own reads stay streamed one chunk at a time (bodyFor).
+// A contiguous [start, end) read of the vault into one array. Only the document scan below uses
+// it, and only a window at a time.
 function vaultBytes(db, meta, start, end) {
-  var cs = meta.chunkSize;
-  var out = new Uint8Array(Math.max(0, end - start));
-  var pos = start;
-  return new Promise(function (res, rej) {
-    (function step() {
-      if (pos >= end) { res(out); return; }
-      var idx = Math.floor(pos / cs);
-      readOnly(db, "chunks", idx).then(function (chunk) {
-        if (!chunk) { rej(new Error("vault is missing chunk " + idx)); return; }
-        var view = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
-        var base = idx * cs;
-        var from = pos - base;
-        var take = Math.min(view.length, end - base) - from;
-        if (take <= 0) { rej(new Error("vault chunk " + idx + " is short")); return; }
-        out.set(view.subarray(from, from + take), pos - start);
-        pos += take;
-        step();
-      }).catch(rej);
-    })();
-  });
+  return blobFor(db, meta).then(function (blob) {
+    return blob.slice(start, end).arrayBuffer();
+  }).then(function (buf) { return new Uint8Array(buf); });
 }
 
 // The app's own html, out of the carrier's inert block - or null when the vault already holds one
@@ -178,6 +173,71 @@ function readApp(db, meta) {
   return scanTo(8 << 20);
 }
 
+// THE SYNC READ, REPOINTED. The game reads its payload with `x.open('GET', url, false)`, which no
+// worker can answer, so the document this worker serves carries a shim that sends those reads to
+// the payload's blob: URL instead - the launcher has it (it composed the vault into one Blob) and
+// passes it in the query. The shim is injected before the app's own scripts, and it leaves every
+// other request alone: the app's Range gate stays a fetch and this worker answers it.
+// The blob has to belong to THIS document: a blob: URL made in the launcher is dead by the time the
+// game document runs (measured - `NetworkError` on the first read after a navigation), while the
+// store it named is still there. So the shim composes the vault into one Blob itself, on the same
+// origin, and hands out that URL - and it starts at document start, which is tens of MB of document
+// parse before the app's own scripts can ask for a byte.
+function shimSource() {
+  return "(function(){"
+    + "var DB=" + JSON.stringify(DB_NAME) + ",PAY=location.pathname,url='',warned=false;"
+    + "function isPay(u){try{var a=new URL(u,location.href);"
+    + "return a.origin===location.origin&&a.pathname===PAY;}catch(e){return false;}}"
+    + "var X=XMLHttpRequest.prototype,open=X.open;"
+    + "X.open=function(m,u){if(u&&String(m).toUpperCase()==='GET'&&isPay(u)){"
+    + "if(url)arguments[1]=url;"
+    + "else if(!warned){warned=true;console.warn('[fn-launch] a payload read arrived before the blob was ready');}"
+    + "}return open.apply(this,arguments);};"
+    + "var S=globalThis.__fnw_shim={phase:'start',chunks:0,got:0,missing:0,err:null};"
+    + "function fail(e){S.err=String((e&&e.message)||e).slice(0,140);console.warn('[fn-launch] '+S.err);}"
+    + "try{var req=indexedDB.open(DB,1);}catch(e){fail(e);return;}"
+    + "req.onerror=function(){S.phase='open-failed';fail(req.error);};"
+    + "req.onsuccess=function(){try{var db=req.result;S.phase='open';"
+    + "var t=db.transaction(['meta','chunks'],'readwrite'),q=t.objectStore('meta').get('game');"
+    + "t.onabort=function(){S.phase='aborted';fail(t.error);};"
+    + "q.onsuccess=function(){try{S.phase='meta';var meta=q.result;"
+    + "if(!meta||!meta.chunks){S.phase='no-vault';return;}"
+    + "var n=meta.chunks,parts=new Array(n),left=n,st=t.objectStore('chunks');S.chunks=n;"
+    + "for(var i=0;i<n;i++)(function(i){var g=st.get(i);"
+    + "g.onsuccess=function(){try{var v=g.result;if(v==null){S.missing++;}"
+    + "else if(v instanceof Blob){parts[i]=v;S.got++;}"
+    + "else{parts[i]=new Blob([v]);st.put(parts[i],i);S.got++;}"
+    + "if(--left)return;S.phase='composing';url=URL.createObjectURL(new Blob(parts));"
+    + "S.phase='ready';globalThis.__fnw_pay_url=url;"
+    + "console.log('[fn-launch] payload blob ready: '+url.slice(0,32)+'...');}catch(e){fail(e);}};"
+    + "g.onerror=function(){S.missing++;if(--left)return;S.phase='chunk-errors';};})(i);"
+    + "}catch(e){fail(e);}};"
+    + "}catch(e){fail(e);}};"
+    + "})();";
+}
+var SHIM_BYTES = null;
+function shimBytes() {
+  if (!SHIM_BYTES) SHIM_BYTES = new TextEncoder().encode("<script>" + shimSource() + "<" + "/script>");
+  return SHIM_BYTES;
+}
+
+// Put the shim after `<head>` (not before the doctype: a script ahead of it puts the document in
+// quirks mode, and the app draws into a canvas whose box the page computes in px). The document is
+// ASCII up to there, so a byte offset is a string offset.
+function injectShim(doc) {
+  var shim = shimBytes();
+  var peek = new TextDecoder("utf-8").decode(doc.subarray(0, Math.min(doc.length, 8192)));
+  var low = peek.toLowerCase(), at = -1;
+  var head = low.indexOf("<head");
+  if (head >= 0) { var gt = peek.indexOf(">", head); if (gt >= 0) at = gt + 1; }
+  if (at < 0) { var dt = low.indexOf("<!doctype"); at = dt === 0 ? (peek.indexOf(">") + 1) : 0; }
+  var out = new Uint8Array(doc.length + shim.length);
+  out.set(doc.subarray(0, at), 0);
+  out.set(shim, at);
+  out.set(doc.subarray(at), at + shim.length);
+  return out;
+}
+
 function serve(request) {
   return openDb().then(function (db) {
     return readOnly(db, "meta", "game").then(function (meta) {
@@ -196,9 +256,17 @@ function serve(request) {
       if (!range) {
         // A full read IS the document, and for the blob shape that is the app the carrier carries.
         return readApp(db, meta).then(function (doc) {
-          var all = Object.assign({}, POLICY, { "Content-Length": String(doc ? doc.length : size) });
-          if (request.method === "HEAD") return new Response(null, { status: 200, headers: all });
-          return new Response(doc || bodyFor(db, meta, 0, size), { status: 200, headers: all });
+          if (doc) doc = injectShim(doc);
+          if (doc) {
+            var all = Object.assign({}, POLICY, { "Content-Length": String(doc.length) });
+            if (request.method === "HEAD") return new Response(null, { status: 200, headers: all });
+            return new Response(doc, { status: 200, headers: all });
+          }
+          return blobFor(db, meta).then(function (blob) {
+            var whole = Object.assign({}, POLICY, { "Content-Length": String(size) });
+            if (request.method === "HEAD") return new Response(null, { status: 200, headers: whole });
+            return new Response(blob, { status: 200, headers: whole });
+          });
         });
       }
       var start = range[0];
@@ -206,7 +274,9 @@ function serve(request) {
       var headers = Object.assign({}, POLICY, { "Content-Length": String(end - start) });
       headers["Content-Range"] = "bytes " + start + "-" + (end - 1) + "/" + size;
       if (request.method === "HEAD") return new Response(null, { status: 206, headers: headers });
-      return new Response(bodyFor(db, meta, start, end), { status: 206, headers: headers });
+      return blobFor(db, meta).then(function (blob) {
+        return new Response(blob.slice(start, end), { status: 206, headers: headers });
+      });
     });
   }).catch(function (e) {
     return new Response("launcher vault error: " + (e && e.message ? e.message : e), {
