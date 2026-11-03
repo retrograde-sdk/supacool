@@ -1,0 +1,490 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 1000 620"
+     role="application" aria-label="Fortnite OG launcher"
+     style="background:#04060c">
+  <title>Fortnite OG - single file launcher</title>
+  <desc>Stores the game in this origin's own storage and serves it from a worker that grants cross-origin isolation.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#05070e"/>
+      <stop offset=".55" stop-color="#080c18"/>
+      <stop offset="1" stop-color="#04050a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#4f7dff" stop-opacity=".30"/>
+      <stop offset=".55" stop-color="#3f5fd0" stop-opacity=".10"/>
+      <stop offset="1" stop-color="#3f5fd0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="slab" x1="0" y1="0" x2=".2" y2="1">
+      <stop offset="0" stop-color="#a6c4d3"/>
+      <stop offset=".45" stop-color="#6c90b7"/>
+      <stop offset="1" stop-color="#24366c"/>
+    </linearGradient>
+    <linearGradient id="rail" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#eaf4ff"/>
+      <stop offset="1" stop-color="#9ed0ff"/>
+    </linearGradient>
+    <style>
+      .btn { cursor: pointer; }
+      .btn.off { opacity: .42; pointer-events: none; }
+      .btn rect { transition: opacity .12s linear; }
+      .btn:hover rect { opacity: .88; }
+      text { font-family: Impact, 'Arial Black', 'Helvetica Neue', system-ui, sans-serif; }
+      .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+    </style>
+  </defs>
+
+  <rect width="1000" height="620" fill="url(#bg)"/>
+  <circle cx="806" cy="128" r="300" fill="url(#glow)"/>
+
+  <g transform="rotate(-8 500 300)">
+    <rect x="78" y="92" width="844" height="436" fill="url(#slab)" fill-opacity=".97"
+          stroke="#f2f8ff" stroke-width="2" stroke-opacity=".85"/>
+    <rect x="96" y="110" width="808" height="400" fill="none" stroke="#ffffff" stroke-opacity=".22"/>
+
+    <text x="122" y="176" font-size="60" font-weight="900" fill="#ffffff" letter-spacing="2">FORTNITE</text>
+    <text x="126" y="203" font-size="13" fill="#e9f3ff" letter-spacing="6" opacity=".88">OG 1.8  -  SINGLE FILE</text>
+
+    <rect x="122" y="222" width="756" height="74" fill="#ffffff" fill-opacity=".16"/>
+    <text id="st" x="142" y="252" font-size="19" fill="#ffffff" data-y="252" data-cols="64" data-dy="22">Starting...</text>
+
+    <text id="sub" x="142" y="312" font-size="13" fill="#0d1a33" fill-opacity=".82" data-y="312" data-cols="88" data-dy="17" data-max="3">checking the worker and the vault</text>
+
+    <rect x="122" y="364" width="756" height="10" fill="#0b1a30" fill-opacity=".38"/>
+    <rect id="fill" x="122" y="364" width="0" height="10" fill="url(#rail)"/>
+    <text id="pct" x="878" y="356" font-size="13" fill="#0d1a33" fill-opacity=".85" text-anchor="end" class="mono">0%</text>
+
+    <g id="go" class="btn" role="button" tabindex="0" aria-label="Download and launch">
+      <rect x="122" y="392" width="266" height="58" fill="#eaf4ff"/>
+      <text id="golabel" x="255" y="430" font-size="21" fill="#0f2036" text-anchor="middle" letter-spacing="2">DOWNLOAD</text>
+    </g>
+    <g id="clr" class="btn" role="button" tabindex="0" aria-label="Clear stored game">
+      <rect x="404" y="392" width="196" height="58" fill="#ffffff" fill-opacity=".14"
+            stroke="#ffffff" stroke-opacity=".55"/>
+      <text x="502" y="429" font-size="17" fill="#ffffff" text-anchor="middle" letter-spacing="1">CLEAR VAULT</text>
+    </g>
+
+    <text id="diag" x="122" y="472" font-size="11" fill="#0b1730" fill-opacity=".78" class="mono"></text>
+    <text id="warn" x="122" y="492" font-size="11" fill="#7a1020" fill-opacity=".9" data-y="492" data-cols="120" data-dy="13" data-max="2"></text>
+  </g>
+
+  <text x="500" y="596" font-size="11" fill="#7f95b5" text-anchor="middle" class="mono"
+        >worker-granted COOP + COEP  -  no server headers, no sibling page</text>
+
+  <script type="application/ecmascript"><![CDATA[
+"use strict";
+var CFG = {
+  fileId: "1ckzpXOTbMJ4ySJbMJIV1fQyEV5EBwTHV",
+  apiKey: "AIzaSyC5HrSEXwPdoHF3jCvp6gUwzCCyjc6Mimo",
+  chunk: 4194304,
+  game: "__fortnite.html",
+  sw: "fn-launch-sw.js"
+};
+var DB_NAME = "fn-launcher-vault";
+var DB_VERSION = 1;
+var Q = new URLSearchParams(location.search);
+var srcOverride = Q.get("src") ? new URL(Q.get("src"), location.href).href : "";
+var busy = false;
+
+var SVGNS = "http://www.w3.org/2000/svg";
+
+function el(id) { return document.getElementById(id); }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+// SVG has no text flow, and the failure messages (the Drive key one especially) are sentences, so
+// each label is wrapped into tspans by its own column budget instead of running off the plate.
+function wrap(text, cols, maxLines) {
+  var words = String(text == null ? "" : text).split(/\s+/), out = [], cur = "", truncated = false;
+  for (var i = 0; i < words.length; i++) {
+    var w = words[i];
+    if (!w) continue;
+    if (!cur) {
+      cur = w;
+    } else if ((cur + " " + w).length <= cols) {
+      cur += " " + w;
+    } else {
+      if (out.length === maxLines - 1) { truncated = true; break; }
+      out.push(cur);
+      cur = w;
+    }
+    if (cur.length > cols) cur = cur.slice(0, cols);
+  }
+  if (cur && out.length < maxLines) out.push(cur);
+  if (!out.length) out.push("");
+  if (truncated) {
+    var last = out[out.length - 1];
+    out[out.length - 1] = (last.length > cols - 1 ? last.slice(0, cols - 1) : last) + "\u2026";
+  }
+  return out;
+}
+
+function writeLines(id, text) {
+  var n = el(id);
+  var cols = Number(n.getAttribute("data-cols") || 64);
+  var dy = Number(n.getAttribute("data-dy") || 22);
+  var y0 = Number(n.getAttribute("data-y") || n.getAttribute("y") || 0);
+  var maxLines = Number(n.getAttribute("data-max") || 2);
+  while (n.firstChild) n.removeChild(n.firstChild);
+  var lines = wrap(text, cols, maxLines);
+  for (var i = 0; i < lines.length; i++) {
+    var t = document.createElementNS(SVGNS, "tspan");
+    t.setAttribute("x", n.getAttribute("x"));
+    t.setAttribute("y", String(y0 + i * dy));
+    t.textContent = lines[i];
+    n.appendChild(t);
+  }
+}
+
+function say(t) { writeLines("st", t); }
+function note(t) { writeLines("sub", t || ""); }
+function diag(t) { el("diag").textContent = t || ""; }
+function warn(t) { writeLines("warn", t || ""); }
+function pct(f, lab) {
+  var w = Math.max(0, Math.min(1, f || 0)) * 756;
+  el("fill").setAttribute("width", String(w));
+  el("pct").textContent = lab || (Math.round((f || 0) * 100) + "%");
+}
+function bytes(n) {
+  if (!isFinite(n) || n <= 0) return "0 B";
+  var u = ["B", "KB", "MB", "GB", "TB"], i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (n >= 10 || i === 0 ? n.toFixed(0) : n.toFixed(1)) + " " + u[i];
+}
+
+// ---- the vault (same schema the worker reads) --------------------------------------------
+var _db = null;
+function db() {
+  if (_db) return Promise.resolve(_db);
+  return new Promise(function (res, rej) {
+    var r = indexedDB.open(DB_NAME, DB_VERSION);
+    r.onupgradeneeded = function () {
+      var d = r.result;
+      if (!d.objectStoreNames.contains("meta")) d.createObjectStore("meta");
+      if (!d.objectStoreNames.contains("chunks")) d.createObjectStore("chunks");
+    };
+    r.onsuccess = function () { _db = r.result; res(_db); };
+    r.onerror = function () { rej(r.error); };
+  });
+}
+function getMeta() {
+  return db().then(function (d) {
+    return new Promise(function (res, rej) {
+      var q = d.transaction("meta", "readonly").objectStore("meta").get("game");
+      q.onsuccess = function () { res(q.result || null); };
+      q.onerror = function () { rej(q.error); };
+    });
+  });
+}
+function put(store, key, val) {
+  return db().then(function (d) {
+    return new Promise(function (res, rej) {
+      var t = d.transaction(store, "readwrite");
+      t.objectStore(store).put(val, key);
+      t.oncomplete = function () { res(); };
+      t.onerror = function () { rej(t.error); };
+      t.onabort = function () { rej(t.error); };
+    });
+  });
+}
+function wipe() {
+  return db().then(function (d) {
+    return new Promise(function (res, rej) {
+      var t = d.transaction(["meta", "chunks"], "readwrite");
+      t.objectStore("meta").clear();
+      t.objectStore("chunks").clear();
+      t.oncomplete = function () { res(); };
+      t.onerror = function () { rej(t.error); };
+    });
+  });
+}
+
+// ---- google drive ------------------------------------------------------------------------
+function driveBase() {
+  return "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(CFG.fileId);
+}
+function metaUrl() { return driveBase() + "?fields=name,size&key=" + encodeURIComponent(CFG.apiKey); }
+function mediaUrl() { return driveBase() + "?alt=media&key=" + encodeURIComponent(CFG.apiKey); }
+
+// Google nests the useful code: errors[0].reason is usually the generic "forbidden" while the
+// detail that names the real cause (API_KEY_HTTP_REFERRER_BLOCKED and friends) is in
+// details[].reason. Prefer the specific one, or the message tells the player the wrong fix.
+function reasonOf(text) {
+  try {
+    var j = JSON.parse(text);
+    if (!j || !j.error) return "";
+    var all = [];
+    var e = (j.error.errors || [])[0];
+    if (e && e.reason) all.push(e.reason);
+    var d = j.error.details || [];
+    for (var i = 0; i < d.length; i++) if (d[i] && d[i].reason) all.push(d[i].reason);
+    for (var k = 0; k < all.length; k++) if (all[k].indexOf("API_KEY_") === 0) return all[k];
+    return all.length ? all[0] : (j.error.message || "");
+  } catch (err) {
+    return "";
+  }
+}
+
+function explain(text, status) {
+  var reason = reasonOf(text);
+  if (reason === "API_KEY_HTTP_REFERRER_BLOCKED")
+    return "The API key blocks this site. In Google Cloud console: APIs and Services, Credentials, this key, HTTP referrers, then add " + location.origin + "/*";
+  if (reason === "API_KEY_SERVICE_BLOCKED")
+    return "The key is not allowed to call the Drive API. Enable Google Drive API for the key's project.";
+  if (reason === "API_KEY_INVALID" || /API key not valid/i.test(text))
+    return "The API key was rejected. Check it is the same key and that Drive API is enabled.";
+  if (status === 404)
+    return "Drive answered 404: the file id is wrong or the key is not allowed to see the file.";
+  if (status === 403)
+    return "Drive refused the download (" + (reason || "403") + "). The file must be shared as 'Anyone with the link'.";
+  return "Drive answered " + status + (reason ? " (" + reason + ")" : "") + ".";
+}
+
+function fetchMeta() {
+  return fetch(metaUrl(), { cache: "no-store" }).then(function (r) {
+    return r.text().then(function (t) {
+      if (!r.ok) throw new Error(explain(t, r.status));
+      var j = JSON.parse(t);
+      return { size: Number(j.size || 0), name: j.name || CFG.game };
+    });
+  });
+}
+
+// ---- the download ------------------------------------------------------------------------
+var buf = null, off = 0, idx = 0, have = 0, head = "";
+
+function resetBuffers() {
+  buf = new Uint8Array(CFG.chunk);
+  off = 0;
+  idx = 0;
+  have = 0;
+  head = "";
+}
+
+function flushChunk() {
+  if (!off) return Promise.resolve();
+  var piece = buf.slice(0, off);
+  var at = idx;
+  idx += 1;
+  off = 0;
+  buf = new Uint8Array(CFG.chunk);
+  return put("chunks", at, piece);
+}
+
+async function download(total, name) {
+  var url = srcOverride || mediaUrl();
+  resetBuffers();
+  await wipe();
+  var started = Date.now(), lastTick = 0, attempts = 0, done = false, first = true;
+  while (!done) {
+    var headers = {};
+    if (have > 0) headers.Range = "bytes=" + have + "-";
+    var r;
+    try {
+      r = await fetch(url, { headers: headers, cache: "no-store" });
+    } catch (e) {
+      attempts += 1;
+      if (attempts > 4)
+        throw new Error("The download could not be reached (" + e.message + "). If this is a CORS failure, the API key's HTTP referrers must include " + location.origin + "/*");
+      say("Connection lost, retrying...");
+      await sleep(700 * attempts);
+      continue;
+    }
+    if (!r.ok) {
+      var t = "";
+      try { t = await r.text(); } catch (e2) { t = ""; }
+      if (r.status >= 500 && attempts < 2) { attempts += 1; await sleep(1200); continue; }
+      throw new Error(explain(t, r.status));
+    }
+    if (have > 0 && r.status !== 206) { resetBuffers(); await wipe(); }
+    var reader = r.body.getReader();
+    for (;;) {
+      var step;
+      try {
+        step = await reader.read();
+      } catch (e) {
+        break;
+      }
+      if (step.done) { done = true; break; }
+      var v = step.value;
+      if (first) { first = false; if (!total) total = v.length; }
+      if (head.length < 400) {
+        var take0 = Math.min(400 - head.length, v.length);
+        head += new TextDecoder().decode(v.slice(0, take0));
+      }
+      var p = 0;
+      while (p < v.length) {
+        var take = Math.min(CFG.chunk - off, v.length - p);
+        buf.set(v.subarray(p, p + take), off);
+        off += take;
+        p += take;
+        have += take;
+        if (off === CFG.chunk) await flushChunk();
+      }
+      var now = Date.now();
+      if (now - lastTick > 120) {
+        lastTick = now;
+        var rate = have / Math.max(1, now - started) * 1000;
+        var eta = total && rate > 0 ? (total - have) / rate : 0;
+        pct(total ? have / total : 0, total ? Math.round(have / total * 100) + "%" : bytes(have));
+        note(bytes(have) + (total ? " of " + bytes(total) : "") + "  -  " + bytes(rate) + "/s" +
+             (eta > 0 ? "  -  " + Math.round(eta) + "s left" : ""));
+      }
+    }
+    if (total && have < total) {
+      attempts += 1;
+      if (attempts > 5) throw new Error("The download stalled at " + bytes(have) + " of " + bytes(total) + " after 5 attempts.");
+      say("Reconnecting at " + bytes(have) + "...");
+      await sleep(600 * attempts);
+      done = false;
+      continue;
+    }
+    if (!total) break;
+  }
+  await flushChunk();
+  return { size: have, chunks: idx, name: name || CFG.game };
+}
+
+function checkDocument() {
+  var sig = head.replace(/^\uFEFF/, "").replace(/^\s+/, "").slice(0, 120).toLowerCase();
+  if (sig.indexOf("<!doctype html") !== 0 && sig.indexOf("<html") !== 0)
+    throw new Error("What arrived is not an html document (it starts " + JSON.stringify(sig.slice(0, 24)) +
+                    "). Check that the Drive file is the single-file build and shared as 'Anyone with the link'.");
+}
+
+async function ensureWorker() {
+  if (!isSecureContext) throw new Error("This page is not a secure context. Serve it over https:// (localhost counts) so it can register its worker.");
+  if (!("serviceWorker" in navigator)) throw new Error("This browser has no service worker support, so the game cannot be served isolated here.");
+  var reg = await navigator.serviceWorker.register(CFG.sw, { scope: "./" });
+  await navigator.serviceWorker.ready;
+  return reg;
+}
+
+async function spaceFor(need) {
+  if (!navigator.storage || !navigator.storage.estimate) return true;
+  try {
+    if (navigator.storage.persist) await navigator.storage.persist();
+    var e = await navigator.storage.estimate();
+    var free = (e.quota || 0) - (e.usage || 0);
+    if (need && free < need * 1.08)
+      throw new Error("This origin may store " + bytes(free) + " more and the game needs " + bytes(need) +
+                      ". Free space in the browser profile (or clear the vault) and try again.");
+    return true;
+  } catch (err) {
+    if (err && err.message && err.message.indexOf("may store") >= 0) throw err;
+    return true;
+  }
+}
+
+async function start() {
+  if (busy) return;
+  busy = true;
+  el("go").classList.add("off");
+  try {
+    el("golabel").textContent = "WORKING";
+    say("Linking the launcher's worker...");
+    note("the worker is what grants cross-origin isolation");
+    var reg = await ensureWorker();
+    diag("worker " + (reg.active ? "active" : "pending") + "  scope " + new URL(reg.scope).pathname);
+
+    var meta = await getMeta();
+    var source = srcOverride || ("drive:" + CFG.fileId);
+    if (meta && meta.size && meta.source !== source) { await wipe(); meta = null; }
+    if (meta && meta.size) {
+      say("Already stored  -  " + bytes(meta.size));
+      note(meta.name || CFG.game);
+      pct(1, "100%");
+    } else {
+      var total = 0, name = CFG.game;
+      if (srcOverride) {
+        say("Reading the game's size...");
+        var h = await fetch(srcOverride, { method: "HEAD", cache: "no-store" });
+        if (!h.ok) throw new Error("The ?src= url answered " + h.status + ".");
+        total = Number(h.headers.get("content-length") || 0);
+      } else {
+        say("Asking Drive for the file...");
+        var m = await fetchMeta();
+        total = m.size;
+        name = m.name;
+      }
+      await spaceFor(total);
+      say("Downloading " + (name || "the game") + "  -  " + bytes(total));
+      note("stored in this origin's vault, not in memory");
+      var got = await download(total, name);
+      checkDocument();
+      meta = {
+        size: got.size, chunkSize: CFG.chunk, chunks: got.chunks, name: got.name,
+        source: source, storedAt: Date.now(), head: head.slice(0, 64)
+      };
+      await put("meta", "game", meta);
+      pct(1, "100%");
+      say("Ready  -  " + bytes(meta.size) + " stored");
+      note("the worker serves it with COOP and COEP");
+    }
+    el("golabel").textContent = "DROP IN";
+    el("go").classList.remove("off");
+    await sleep(220);
+    say("Launching...");
+    location.replace(CFG.game);
+  } catch (e) {
+    // the status line stays short; the sentence that says what to fix goes under it
+    say("Stopped");
+    note(e && e.message ? e.message : "unknown error");
+    el("go").classList.remove("off");
+    el("golabel").textContent = "RETRY";
+    busy = false;
+  }
+}
+
+var SHARED = ["cdn.jsdelivr.net", "raw.githack.com", "cdn.statically.io", "gitcdn.link"];
+
+async function refresh() {
+  var meta = await getMeta().catch(function () { return null; });
+  var parts = [location.origin, "secure " + (isSecureContext ? "yes" : "no"),
+               "key " + (CFG.apiKey ? "baked" : "missing"), "file " + (CFG.fileId ? CFG.fileId.slice(0, 8) : "none"),
+               "vault " + (meta && meta.size ? bytes(meta.size) : "empty")];
+  diag(parts.join("   -   "));
+  if (SHARED.indexOf(location.hostname) >= 0)
+    warn("this host is shared: the vault lives on " + location.hostname + " and other pages there can read it");
+  if (srcOverride) warn("?src= override: downloading " + srcOverride);
+  if (meta && meta.size) {
+    el("golabel").textContent = "DROP IN";
+    el("go").classList.remove("off");
+    say("Ready  -  " + bytes(meta.size) + " stored");
+    pct(1, "100%");
+    note(meta.name || CFG.game);
+  } else {
+    el("golabel").textContent = "DOWNLOAD";
+    el("go").classList.remove("off");
+    say("Not downloaded yet");
+    pct(0, "0%");
+    note("press download: the game lands in this origin's vault");
+  }
+}
+
+function wire() {
+  el("go").addEventListener("click", function () { start(); });
+  el("go").addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); start(); } });
+  el("clr").addEventListener("click", async function () {
+    await wipe();
+    await refresh();
+    say("Vault cleared");
+    note("press download to fetch it again");
+  });
+  el("clr").addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el("clr").dispatchEvent(new Event("click")); } });
+}
+
+(async function boot() {
+  wire();
+  if (Q.get("reset") === "1") await wipe().catch(function () {});
+  await refresh();
+  if (Q.get("autostart") === "1") {
+    say("Starting...");
+    await start();
+  }
+})().catch(function (e) {
+  say("Stopped");
+  note(e && e.message ? e.message : String(e));
+});
+]]></script>
+</svg>
